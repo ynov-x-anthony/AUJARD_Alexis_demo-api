@@ -1,0 +1,8 @@
+# Ne pas envoyer ces fichiers au contexte de build Docker.
+node_modules
+.git
+*.md
+.env*
+Dockerfile
+.dockerignore
+npm-debug.log*

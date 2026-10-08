@@ -91,3 +91,75 @@ y créer une table, insérer une ligne, puis nettoyer le conteneur.
 - `psql` vit **dans** l'image `postgres`, donc on l'exécute via `docker exec`.
 - Sous **PowerShell**, j'ai séparé `docker stop` et `docker rm` (le `&&` du shell Unix
   n'est pas garanti sous Windows PowerShell).
+
+---
+
+## Quête 2 — Fil rouge étape 1 : le Dockerfile de `demo-api`
+
+**Objectif :** produire une image de `demo-api` qui démarre le serveur Node.
+
+Le code (`server.js`, `db.js`, `package.json`, `package-lock.json`) vient du repo
+de départ fourni par le formateur. J'ai écrit le `Dockerfile` et le `.dockerignore`
+dans [`api/`](./api).
+
+### Le Dockerfile (points clés)
+
+- Base **épinglée et légère** : `node:22-alpine`.
+- **Dépendances en couche séparée du code** : `COPY package.json package-lock.json`
+  → `RUN npm ci --omit=dev` → **puis** `COPY server.js db.js`.
+  Résultat : modifier le code ne recasse pas l'installation des dépendances.
+- `EXPOSE 3000`.
+- Démarrage en **exec form** : `CMD ["node", "server.js"]` (node = PID 1, reçoit SIGTERM).
+
+### Build, run et test
+
+```bash
+docker build -t demo-api:1.0 ./api
+
+docker run -d --name api -p 8080:3000 demo-api:1.0
+curl -s localhost:8080/health   # {"status":"UP"}
+curl -s localhost:8080/         # {"ok":true,"app":"demo-api","version":"dev"}
+docker rm -f api
+```
+
+Sorties obtenues :
+
+```
+GET /health  -> {"status":"UP"}
+GET /        -> {"ok":true,"app":"demo-api","version":"dev"}
+```
+
+### Preuve du cache
+
+Après modification d'un simple commentaire dans `server.js`, rebuild avec
+`docker build --progress=plain -t demo-api:1.0 ./api` :
+
+```
+#6 [3/5] COPY package.json package-lock.json ./
+#6 CACHED
+#8 [4/5] RUN npm ci --omit=dev
+#8 CACHED
+#9 [5/5] COPY server.js db.js ./
+#9 DONE 0.0s
+```
+
+`npm ci` reste **CACHED** ; seule la couche `COPY server.js db.js` est reconstruite.
+
+### `docker image ls demo-api`
+
+```
+IMAGE          ID             DISK USAGE   CONTENT SIZE
+demo-api:1.0   d6765a364b6d   173MB        0B
+```
+
+### Critères d'acceptation
+
+- [x] L'image se construit et `docker run` répond sur `/health`.
+- [x] `npm ci` est mis en cache quand seul `server.js` change (preuve ci-dessus).
+- [x] Le `Dockerfile` respecte : base épinglée, ordre deps→code, `.dockerignore` présent.
+- [ ] L'image est publiée sur un registre (voir ci-dessous) et le repo est sur GitHub.
+
+### Image publiée
+
+- Registre : _(à compléter : lien Docker Hub ou GHCR)_
+
