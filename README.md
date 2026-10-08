@@ -157,9 +157,11 @@ demo-api:1.0   d6765a364b6d   173MB        0B
 - [x] L'image se construit et `docker run` répond sur `/health`.
 - [x] `npm ci` est mis en cache quand seul `server.js` change (preuve ci-dessus).
 - [x] Le `Dockerfile` respecte : base épinglée, ordre deps→code, `.dockerignore` présent.
-- [ ] L'image est publiée sur un registre (voir ci-dessous) et le repo est sur GitHub.
+- [x] L'image est publiée sur un registre (GHCR, ci-dessous) et le repo est sur GitHub.
 
 ### Image publiée
 
-- Registre : _(à compléter : lien Docker Hub ou GHCR)_
+- Registre : **GHCR** — `ghcr.io/phenix-13/demo-api:1.0`
+- Récupération : `docker pull ghcr.io/phenix-13/demo-api:1.0`
+- Digest : `sha256:263a87c299b3247e228631ec761777930d8ebe3e411a649e678d1e822fab7d84`
 
