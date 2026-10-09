@@ -165,3 +165,56 @@ demo-api:1.0   d6765a364b6d   173MB        0B
 - Récupération : `docker pull ghcr.io/phenix-13/demo-api:1.0`
 - Digest : `sha256:263a87c299b3247e228631ec761777930d8ebe3e411a649e678d1e822fab7d84`
 
+---
+
+## Quête 3 — Fil rouge étape 5 : durcir `demo-api`
+
+**Objectif :** sécuriser l'image et l'exécution de `demo-api`.
+
+Le [`api/Dockerfile`](./api/Dockerfile) a été durci :
+
+- Base **épinglée sur une version mineure** : `node:22.11-alpine` (ni `:22-alpine`, ni `:latest`).
+- `COPY --chown=node:node …` + `USER node` **avant** le `CMD` → l'app tourne en **non-root**.
+- `HEALTHCHECK` sur `/health` (via `wget`).
+- `EXPOSE 3000` (port ≥ 1024).
+- `.dockerignore` exclut `.git`, `.env*`, `node_modules`, `*.md`.
+
+### Build + preuve du non-root
+
+```bash
+docker build -t demo-api:hardened ./api
+docker run --rm demo-api:hardened id
+# uid=1000(node) gid=1000(node) groups=1000(node)
+```
+
+### Commande `docker run` durcie
+
+```bash
+docker run -d --name api -p 8080:3000 \
+  --read-only --tmpfs /tmp:size=16m \
+  --cap-drop ALL --security-opt no-new-privileges \
+  --pids-limit 200 --memory 256m --cpus 1 \
+  --network demo_net -e PGHOST=demo-db \
+  demo-api:hardened
+```
+
+### Preuves du durcissement
+
+```bash
+curl -s localhost:8080/health
+# {"status":"UP"}
+
+docker exec api sh -c 'touch /app/x 2>&1 || echo "rootfs read-only OK"'
+# touch: /app/x: Read-only file system
+
+docker inspect -f 'readonly={{.HostConfig.ReadonlyRootfs}} capdrop={{.HostConfig.CapDrop}}' api
+# readonly=true capdrop=[ALL]
+```
+
+### Critères d'acceptation
+
+- [x] Image sur base épinglée et exécution **non-root** (`id` : `uid=1000(node)`).
+- [x] Le `Dockerfile` a un `HEALTHCHECK` ; le `.dockerignore` exclut `.git` / `.env*`.
+- [x] Le conteneur durci répond sur `/health`, refuse l'écriture sur le rootfs,
+  et `docker inspect` confirme `ReadonlyRootfs=true` + `CapDrop=[ALL]`.
+
