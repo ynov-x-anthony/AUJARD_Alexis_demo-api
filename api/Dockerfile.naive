@@ -1,0 +1,8 @@
+# Dockerfile.naive — REPERE DE COMPARAISON, volontairement lourd.
+# Ce n'est PAS le Dockerfile de prod : il sert uniquement a mesurer
+# l'apport du multi-etapes (base complete, tout copie, deps de dev incluses).
+FROM node:22
+WORKDIR /app
+COPY . .
+RUN npm ci
+CMD ["node", "server.js"]

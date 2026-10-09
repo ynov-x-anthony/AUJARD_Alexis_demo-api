@@ -1,0 +1,30 @@
+# syntax=docker/dockerfile:1
+# Dockerfile.multi — build multi-etapes pour demo-api.
+# L'image finale ne contient QUE le runtime + les node_modules de prod,
+# pas le cache npm ni les outils de build.
+
+# --- Etape 1 : deps -----------------------------------------------------
+# Installe uniquement les dependances de production.
+# Le token npm est injecte via un SECRET de build (--mount=type=secret) :
+# il est disponible pendant "npm ci" mais n'est JAMAIS ecrit dans une couche.
+FROM node:22.11-alpine AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN --mount=type=secret,id=npmrc,target=/root/.npmrc npm ci --omit=dev
+
+# --- Etape 2 : runtime --------------------------------------------------
+# Image finale minimale : on recopie seulement node_modules depuis "deps"
+# + le code applicatif.
+FROM node:22.11-alpine AS runtime
+WORKDIR /app
+COPY --from=deps --chown=node:node /app/node_modules ./node_modules
+COPY --chown=node:node server.js db.js package.json ./
+
+EXPOSE 3000
+
+USER node
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget -q -O - http://127.0.0.1:3000/health || exit 1
+
+CMD ["node", "server.js"]

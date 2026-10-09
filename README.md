@@ -218,3 +218,61 @@ docker inspect -f 'readonly={{.HostConfig.ReadonlyRootfs}} capdrop={{.HostConfig
 - [x] Le conteneur durci répond sur `/health`, refuse l'écriture sur le rootfs,
   et `docker inspect` confirme `ReadonlyRootfs=true` + `CapDrop=[ALL]`.
 
+---
+
+## Quête 4 — Fil rouge étape 6 : `demo-api` en multi-étapes
+
+**Objectif :** réduire la taille de l'image avec un build multi-étapes et gérer
+un secret de build sans le faire fuiter.
+
+> `api/Dockerfile.naive` est **seulement un repère de comparaison** (volontairement
+> lourd), pas le Dockerfile de prod. Le vrai Dockerfile multi-étapes est
+> [`api/Dockerfile.multi`](./api/Dockerfile.multi).
+
+### Build des deux versions
+
+```bash
+docker build -f api/Dockerfile.naive -t demo-api:naive ./api
+docker build -f api/Dockerfile.multi --secret id=npmrc,src=$HOME/.npmrc -t demo-api:multi ./api
+docker image ls demo-api
+```
+
+### Taille avant / après
+
+| Image            | Base            | Taille  |
+|------------------|-----------------|---------|
+| `demo-api:naive` | `node:22`       | 1.14 GB |
+| `demo-api:multi` | `node:22.11-alpine` (multi-étapes) | 158 MB |
+
+**Ratio ≈ 7× plus petit** (objectif : au moins 2×). ✅
+
+### Secret de build (ne doit pas fuiter)
+
+L'étape `deps` installe les dépendances avec un token injecté via
+`RUN --mount=type=secret` (BuildKit). Le token n'est jamais écrit dans une couche :
+
+```bash
+# Faux token cree pour la demo :
+#   echo "//registry.npmjs.org/:_authToken=FAKE-123" > ~/.npmrc
+
+docker history --no-trunc demo-api:multi | grep -i FAKE-123
+# (aucune ligne)
+
+docker run --rm -u root demo-api:multi sh -c 'cat /root/.npmrc 2>&1'
+# cat: can't open '/root/.npmrc': No such file or directory
+```
+
+### L'image tourne toujours
+
+```bash
+docker run --rm -p 8080:3000 demo-api:multi
+curl localhost:8080/health   # {"status":"UP"}
+```
+
+### Critères d'acceptation
+
+- [x] `api/Dockerfile.naive` et `api/Dockerfile.multi` présents (naive = repère seul).
+- [x] `:multi` au moins 2× plus petit que `:naive` (ici ~7×).
+- [x] Le token `FAKE-123` n'apparaît pas dans `docker history` et `/root/.npmrc`
+  n'existe pas dans l'image.
+
